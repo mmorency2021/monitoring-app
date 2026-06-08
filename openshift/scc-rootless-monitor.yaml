@@ -1,0 +1,115 @@
+---
+# Security Context Constraint for Rootless Monitoring Agent
+# Purpose: Enable non-root monitoring with hostPath access to /proc and /sys
+# Why needed: Default SCCs either forbid hostPath or require UIDs > 1000000000
+
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: rootless-monitor-scc
+  annotations:
+    kubernetes.io/description: |
+      Allows rootless monitoring agents to access host /proc and /sys filesystems
+      for process and system monitoring while maintaining non-root security.
+
+      Use case: EDR-style monitoring without root privileges
+      Security: Read-only hostPath, no privilege escalation, minimal capabilities
+
+# === HOST ACCESS CONTROLS ===
+# WHY: Need to mount /proc and /sys from host for monitoring
+allowHostDirVolumePlugin: true
+
+# WHY: Monitoring doesn't need host IPC/Network/PID namespaces
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+
+# === PRIVILEGE CONTROLS ===
+# WHY: Never allow privilege escalation or privileged containers
+allowPrivilegeEscalation: false
+allowPrivilegedContainer: false
+
+# === CAPABILITIES ===
+# WHY: Specify exact capabilities needed for different monitoring levels
+# Minimal variant: No additional capabilities
+# Enhanced variant: SYS_PTRACE, NET_RAW
+# eBPF variant: BPF, PERFMON
+
+allowedCapabilities:
+  - SYS_PTRACE      # Process inspection (enhanced/eBPf variants)
+  - NET_RAW         # Network monitoring (enhanced variant)
+  - BPF             # eBPF programs (eBPF variant, Linux 5.8+)
+  - PERFMON         # Performance monitoring (eBPF variant, Linux 5.8+)
+
+# WHY: Don't add any capabilities by default
+defaultAddCapabilities: []
+
+# WHY: Drop dangerous capabilities that monitoring doesn't need
+requiredDropCapabilities:
+  - KILL
+  - MKNOD
+  - SETUID
+  - SETGID
+  - SYS_ADMIN       # Too broad, never needed
+  - NET_ADMIN       # Not needed for read-only monitoring
+
+# === HOST PATH RESTRICTIONS ===
+# WHY: Restrict hostPath to only /proc, /sys, and /sys/kernel/debug
+# WHY: Read-only prevents tampering with host
+allowedHostPaths:
+  - pathPrefix: "/proc"
+    readOnly: true
+  - pathPrefix: "/sys"
+    readOnly: true
+  - pathPrefix: "/sys/kernel/debug"
+    readOnly: true
+
+# === FILESYSTEM CONTROLS ===
+# WHY: Allow fsGroup to be set for proper file permissions
+fsGroup:
+  type: MustRunAs
+  ranges:
+    - min: 1000
+      max: 1000
+
+# WHY: Enforce read-only root filesystem (best practice)
+readOnlyRootFilesystem: true
+
+# === USER/GROUP CONTROLS ===
+# WHY: Force running as UID 1000 (non-root)
+# WHY: This is the key difference from default SCCs - allow low UID
+runAsUser:
+  type: MustRunAsRange
+  uidRangeMin: 1000
+  uidRangeMax: 1000
+
+# WHY: Enforce SELinux for container isolation
+seLinuxContext:
+  type: MustRunAs
+
+# WHY: Allow supplemental groups for file access
+supplementalGroups:
+  type: RunAsAny
+
+# === VOLUME TYPES ===
+# WHY: Allow only necessary volume types
+volumes:
+  - configMap
+  - downwardAPI
+  - emptyDir
+  - hostPath        # CRITICAL: Required for /proc and /sys
+  - persistentVolumeClaim
+  - projected
+  - secret
+
+# === PRIORITY ===
+# WHY: Higher priority than restricted (0) so it's preferred when allowed
+# WHY: Lower than privileged (default) so it doesn't override safer SCCs
+priority: 5
+
+# === ACCESS CONTROL ===
+# WHY: Grant access to specific service account only
+# NOTE: Apply with: oc adm policy add-scc-to-user rootless-monitor-scc -z rootless-monitor -n rootless-monitor
+users: []
+groups: []

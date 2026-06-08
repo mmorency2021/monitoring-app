@@ -39,8 +39,8 @@ spec:
 
       containers:
       - name: monitor
-        image: rootless-monitor:latest
-        imagePullPolicy: IfNotPresent
+        image: ghcr.io/mmorency2021/monitoring-app:latest
+        imagePullPolicy: Always
 
         # === CONTAINER-LEVEL SECURITY CONTEXT ===
         securityContext:

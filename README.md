@@ -65,17 +65,48 @@ Three deployment variants with different capability levels:
 
 ## 🚀 Quick Start
 
-### 1. Build the Container Image
+### Option A: Use Pre-Built Image (Recommended)
+
+The easiest way - no building required!
 
 ```bash
 cd rootless-monitor-agent
 
-# Build the image
+# Manifests already use ghcr.io/mmorency2021/monitoring-app:latest
+# Just deploy directly
+kubectl apply -f kubernetes/namespace.yaml
+kubectl apply -f kubernetes/serviceaccount.yaml
+kubectl apply -f kubernetes/configmap.yaml
+kubectl apply -f kubernetes/daemonset-minimal.yaml
+```
+
+**Note**: First time pulling from ghcr.io might be slow (~30s for python:3.11-slim base image).
+
+### Option B: Build Locally (For Development)
+
+If you want to modify the code:
+
+```bash
+# 1. Build the image
 docker build -t rootless-monitor:latest .
 
-# Verify it's built correctly
+# 2. Verify it's built correctly
 docker run --rm rootless-monitor:latest id
 # Should show: uid=1000(monitor) gid=1000(monitor)
+
+# 3. Load into your cluster
+# For minikube:
+minikube image load rootless-monitor:latest
+
+# For kind:
+kind load docker-image rootless-monitor:latest
+
+# 4. Update manifests to use local image
+# Edit kubernetes/daemonset-*.yaml and change:
+#   image: ghcr.io/mmorency2021/monitoring-app:latest
+# to:
+#   image: rootless-monitor:latest
+#   imagePullPolicy: IfNotPresent
 ```
 
 ### 2. Deploy to Kubernetes

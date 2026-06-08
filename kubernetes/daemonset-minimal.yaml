@@ -66,9 +66,16 @@ spec:
 
       containers:
       - name: monitor
-        # Build this image from the Dockerfile
-        image: rootless-monitor:latest
-        imagePullPolicy: IfNotPresent
+        # OPTION 1: Use pre-built image from GitHub Container Registry (RECOMMENDED)
+        image: ghcr.io/mmorency2021/monitoring-app:latest
+        imagePullPolicy: Always
+
+        # OPTION 2: Use locally built image (for development/testing only)
+        # Requires: docker build -t rootless-monitor:latest .
+        #           AND: minikube image load rootless-monitor:latest (for minikube)
+        #           OR:  kind load docker-image rootless-monitor:latest (for kind)
+        # image: rootless-monitor:latest
+        # imagePullPolicy: IfNotPresent
 
         # === CONTAINER-LEVEL SECURITY CONTEXT ===
         # NOTE: These can override pod-level settings for this specific container

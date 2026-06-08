@@ -8,6 +8,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     procps \
     net-tools \
+    libcap2-bin \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python packages

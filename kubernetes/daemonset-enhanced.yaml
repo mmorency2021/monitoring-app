@@ -56,17 +56,17 @@ spec:
               - ALL
             add:
               # Process tracing and inspection
-              - CAP_SYS_PTRACE
+              - SYS_PTRACE
 
               # Network packet capture
-              - CAP_NET_RAW
+              - NET_RAW
 
               # Network administration (optional)
-              # - CAP_NET_ADMIN
+              # - NET_ADMIN
 
               # eBPF operations (Linux 5.8+)
-              # - CAP_BPF
-              # - CAP_PERFMON
+              # - BPF
+              # - PERFMON
 
         env:
         - name: NODE_NAME

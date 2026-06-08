@@ -55,15 +55,11 @@ spec:
             drop:
               - ALL
             add:
-              # Load and manage eBPF programs
-              - CAP_BPF
+              # Load and manage eBPF programs (Linux 5.8+)
+              - BPF
 
-              # Access performance monitoring events
-              - CAP_PERFMON
-
-              # Optional: For backward compatibility with older kernels
-              # If kernel < 5.8, CAP_BPF doesn't exist, use CAP_SYS_ADMIN
-              # WARNING: CAP_SYS_ADMIN is very powerful, avoid if possible
+              # Access performance monitoring events (Linux 5.8+)
+              - PERFMON
 
         env:
         - name: NODE_NAME

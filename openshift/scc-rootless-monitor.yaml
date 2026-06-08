@@ -92,6 +92,12 @@ seLinuxContext:
 supplementalGroups:
   type: RunAsAny
 
+# === SECCOMP ===
+# WHY: Allow seccomp profiles (RuntimeDefault or custom)
+seccompProfiles:
+  - runtime/default
+  - localhost/*
+
 # === VOLUME TYPES ===
 # WHY: Allow only necessary volume types
 volumes:

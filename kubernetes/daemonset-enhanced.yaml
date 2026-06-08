@@ -1,0 +1,146 @@
+---
+# DaemonSet - Enhanced Capabilities Version
+# This version includes CAP_SYS_PTRACE and CAP_NET_RAW for deeper monitoring
+# Similar to what NEDR would need
+
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: rootless-monitor-enhanced
+  namespace: rootless-monitor
+  labels:
+    app: rootless-monitor
+    variant: enhanced
+spec:
+  selector:
+    matchLabels:
+      app: rootless-monitor
+      variant: enhanced
+
+  template:
+    metadata:
+      labels:
+        app: rootless-monitor
+        variant: enhanced
+      annotations:
+        description: "Rootless monitoring agent - enhanced capabilities (CAP_SYS_PTRACE, CAP_NET_RAW)"
+
+    spec:
+      serviceAccountName: rootless-monitor
+
+      # === POD-LEVEL SECURITY CONTEXT ===
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+      - name: monitor
+        image: rootless-monitor:latest
+        imagePullPolicy: IfNotPresent
+
+        # === CONTAINER-LEVEL SECURITY CONTEXT ===
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+
+          # Enhanced capabilities for deeper monitoring
+          capabilities:
+            drop:
+              - ALL
+            add:
+              # Process tracing and inspection
+              - CAP_SYS_PTRACE
+
+              # Network packet capture
+              - CAP_NET_RAW
+
+              # Network administration (optional)
+              # - CAP_NET_ADMIN
+
+              # eBPF operations (Linux 5.8+)
+              # - CAP_BPF
+              # - CAP_PERFMON
+
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: MONITOR_INTERVAL
+          value: "30"
+
+        volumeMounts:
+        - name: host-proc
+          mountPath: /host/proc
+          readOnly: true
+        - name: host-sys
+          mountPath: /host/sys
+          readOnly: true
+        - name: tmp
+          mountPath: /tmp
+        - name: var-log
+          mountPath: /var/log/monitor
+
+        resources:
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+
+        livenessProbe:
+          exec:
+            command:
+            - test
+            - -f
+            - /tmp/metrics.json
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          exec:
+            command:
+            - test
+            - -f
+            - /tmp/metrics.json
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+
+      volumes:
+      - name: host-proc
+        hostPath:
+          path: /proc
+          type: Directory
+      - name: host-sys
+        hostPath:
+          path: /sys
+          type: Directory
+      - name: tmp
+        emptyDir: {}
+      - name: var-log
+        emptyDir: {}
+
+      tolerations:
+      - effect: NoSchedule
+        operator: Exists
+
+      priorityClassName: system-cluster-critical

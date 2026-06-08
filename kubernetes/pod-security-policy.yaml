@@ -1,0 +1,85 @@
+---
+# PodSecurityPolicy (deprecated in K8s 1.25+, use Pod Security Standards instead)
+# Included here for reference for older clusters
+
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: rootless-monitor-psp
+  annotations:
+    seccomp.security.alpha.kubernetes.io/allowedProfileNames: 'runtime/default'
+    apparmor.security.beta.kubernetes.io/allowedProfileNames: 'runtime/default'
+spec:
+  # Privilege and access controls
+  privileged: false
+  allowPrivilegeEscalation: false
+
+  # Required to prevent escalations to root
+  requiredDropCapabilities:
+    - ALL
+
+  # Allow specific capabilities
+  allowedCapabilities:
+    - CAP_SYS_PTRACE    # For enhanced version
+    - CAP_NET_RAW       # For enhanced version
+    - CAP_BPF           # For eBPF version
+    - CAP_PERFMON       # For eBPF version
+
+  # Volumes
+  volumes:
+    - 'configMap'
+    - 'emptyDir'
+    - 'projected'
+    - 'secret'
+    - 'downwardAPI'
+    - 'hostPath'        # Allow host path for /proc and /sys
+
+  # Host namespaces
+  hostNetwork: false
+  hostPID: false
+  hostIPC: false
+
+  # SELinux
+  seLinux:
+    rule: RunAsAny
+
+  # User and group
+  runAsUser:
+    rule: MustRunAsNonRoot
+
+  supplementalGroups:
+    rule: RunAsAny
+
+  fsGroup:
+    rule: RunAsAny
+
+  # Read-only root filesystem
+  readOnlyRootFilesystem: true
+
+---
+# ClusterRole to use the PSP
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: rootless-monitor-psp-user
+rules:
+- apiGroups: ['policy']
+  resources: ['podsecuritypolicies']
+  verbs: ['use']
+  resourceNames:
+  - rootless-monitor-psp
+
+---
+# Bind the ClusterRole to the ServiceAccount
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: rootless-monitor-psp-user
+roleRef:
+  kind: ClusterRole
+  name: rootless-monitor-psp-user
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+- kind: ServiceAccount
+  name: rootless-monitor
+  namespace: rootless-monitor

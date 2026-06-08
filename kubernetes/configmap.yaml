@@ -1,0 +1,36 @@
+---
+# ConfigMap for agent configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rootless-monitor-config
+  namespace: rootless-monitor
+  labels:
+    app: rootless-monitor
+data:
+  # Monitoring interval in seconds
+  monitor-interval: "30"
+
+  # Enable/disable specific monitoring features
+  monitor-processes: "true"
+  monitor-network: "true"
+  monitor-system: "true"
+  monitor-security: "true"
+
+  # Suspicious patterns to detect (JSON array)
+  suspicious-patterns: |
+    [
+      "nc -l",
+      "/dev/tcp",
+      "wget http",
+      "curl http",
+      "chmod 777",
+      "base64 -d",
+      "eval $(curl",
+      "/bin/bash -i",
+      "python -c",
+      "perl -e"
+    ]
+
+  # Log level
+  log-level: "INFO"

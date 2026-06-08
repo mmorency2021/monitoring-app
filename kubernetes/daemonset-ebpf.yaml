@@ -1,0 +1,163 @@
+---
+# DaemonSet - eBPF Version
+# This version uses modern eBPF capabilities (Linux 5.8+)
+# Most advanced and recommended approach
+
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: rootless-monitor-ebpf
+  namespace: rootless-monitor
+  labels:
+    app: rootless-monitor
+    variant: ebpf
+spec:
+  selector:
+    matchLabels:
+      app: rootless-monitor
+      variant: ebpf
+
+  template:
+    metadata:
+      labels:
+        app: rootless-monitor
+        variant: ebpf
+      annotations:
+        description: "Rootless monitoring agent - eBPF capabilities (CAP_BPF, CAP_PERFMON)"
+
+    spec:
+      serviceAccountName: rootless-monitor
+
+      # === POD-LEVEL SECURITY CONTEXT ===
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+      - name: monitor
+        image: rootless-monitor:latest
+        imagePullPolicy: IfNotPresent
+
+        # === CONTAINER-LEVEL SECURITY CONTEXT ===
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+
+          # eBPF-specific capabilities (requires Linux 5.8+)
+          capabilities:
+            drop:
+              - ALL
+            add:
+              # Load and manage eBPF programs
+              - CAP_BPF
+
+              # Access performance monitoring events
+              - CAP_PERFMON
+
+              # Optional: For backward compatibility with older kernels
+              # If kernel < 5.8, CAP_BPF doesn't exist, use CAP_SYS_ADMIN
+              # WARNING: CAP_SYS_ADMIN is very powerful, avoid if possible
+
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: MONITOR_INTERVAL
+          value: "30"
+        - name: USE_EBPF
+          value: "true"
+
+        volumeMounts:
+        - name: host-proc
+          mountPath: /host/proc
+          readOnly: true
+        - name: host-sys
+          mountPath: /host/sys
+          readOnly: true
+
+        # eBPF programs may need access to kernel debug info
+        - name: host-kernel-debug
+          mountPath: /sys/kernel/debug
+          readOnly: true
+
+        - name: tmp
+          mountPath: /tmp
+        - name: var-log
+          mountPath: /var/log/monitor
+
+        resources:
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+
+        livenessProbe:
+          exec:
+            command:
+            - test
+            - -f
+            - /tmp/metrics.json
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          exec:
+            command:
+            - test
+            - -f
+            - /tmp/metrics.json
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+
+      volumes:
+      - name: host-proc
+        hostPath:
+          path: /proc
+          type: Directory
+      - name: host-sys
+        hostPath:
+          path: /sys
+          type: Directory
+
+      # Kernel debug filesystem (for eBPF)
+      - name: host-kernel-debug
+        hostPath:
+          path: /sys/kernel/debug
+          type: Directory
+
+      - name: tmp
+        emptyDir: {}
+      - name: var-log
+        emptyDir: {}
+
+      tolerations:
+      - effect: NoSchedule
+        operator: Exists
+
+      priorityClassName: system-cluster-critical
+
+      # Node selector - only run on nodes with Linux 5.8+
+      # Uncomment if you want to restrict to newer kernels
+      # nodeSelector:
+      #   kernel-version: ">=5.8"

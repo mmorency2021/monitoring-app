@@ -1,0 +1,285 @@
+---
+# DaemonSet - Minimal Capabilities Version
+# This version uses minimal capabilities (no CAP_SYS_PTRACE, no CAP_NET_RAW)
+# Best for demonstrating basic rootless monitoring
+
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: rootless-monitor-minimal
+  namespace: rootless-monitor
+  labels:
+    app: rootless-monitor
+    variant: minimal
+spec:
+  selector:
+    matchLabels:
+      app: rootless-monitor
+      variant: minimal
+
+  template:
+    metadata:
+      labels:
+        app: rootless-monitor
+        variant: minimal
+      annotations:
+        # Document what this pod does
+        description: "Rootless monitoring agent - minimal capabilities"
+
+    spec:
+      # Use the ServiceAccount with read-only K8s API access
+      serviceAccountName: rootless-monitor
+
+      # === POD-LEVEL SECURITY CONTEXT ===
+      # These settings apply to ALL containers in the pod
+      securityContext:
+        # WHY: Enforces that containers MUST run as non-root user
+        # IMPACT: Prevents container from running as UID 0 (root)
+        # SECURITY: Reduces blast radius if container is compromised
+        # COMPLIANCE: Required by Pod Security Standards (Restricted tier)
+        runAsNonRoot: true
+
+        # WHY: Explicitly set the user ID that the container runs as
+        # VALUE: 1000 matches the 'monitor' user created in Dockerfile
+        # SECURITY: Even if image defaults to root, this forces UID 1000
+        # NOTE: Must match USER in Dockerfile for file permissions to work
+        runAsUser: 1000
+
+        # WHY: Set the primary group ID for the container
+        # VALUE: 1000 matches the 'monitor' group in Dockerfile
+        # SECURITY: Controls group ownership of processes
+        runAsGroup: 1000
+
+        # WHY: Files created in volumes will have this group ID
+        # USE CASE: Shared volumes between containers need consistent group ownership
+        # EXAMPLE: Logs written to emptyDir volumes will be group-readable
+        # SECURITY: Prevents permission conflicts in multi-container pods
+        fsGroup: 1000
+
+        # WHY: Restricts syscalls the container can make
+        # PROFILE: RuntimeDefault uses the container runtime's default seccomp profile
+        # SECURITY: Blocks ~44 dangerous syscalls (e.g., reboot, mount, ptrace without CAP_SYS_PTRACE)
+        # ALTERNATIVES: Can use custom profiles for even tighter restrictions
+        # COMPLIANCE: Best practice, recommended by NSA/CISA Kubernetes hardening guide
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+      - name: monitor
+        # Build this image from the Dockerfile
+        image: rootless-monitor:latest
+        imagePullPolicy: IfNotPresent
+
+        # === CONTAINER-LEVEL SECURITY CONTEXT ===
+        # NOTE: These can override pod-level settings for this specific container
+        securityContext:
+          # WHY: Enforce non-root at container level (defense in depth)
+          # REDUNDANCY: Already set at pod level, but belt-and-suspenders approach
+          # SECURITY: If pod-level is bypassed somehow, container level still blocks root
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+
+          # WHY: Prevents gaining more privileges than the parent process
+          # BLOCKS: setuid/setgid binaries from working
+          # EXAMPLE: Even if /bin/sudo exists, it won't be able to escalate privileges
+          # SECURITY: Critical defense against container escape attacks
+          # COMPLIANCE: Required by Pod Security Standards (Restricted tier)
+          allowPrivilegeEscalation: false
+
+          # WHY: Makes the container's root filesystem immutable
+          # BENEFIT: Container cannot modify its own code or binaries
+          # IMPACT: Must use volumes for any writable paths (see volumeMounts below)
+          # SECURITY: Prevents malware from persisting across container restarts
+          # COMPLIANCE: Strongly recommended by NIST, CIS benchmarks
+          # NOTE: /tmp and /var/log are writable via tmpfs volumes
+          readOnlyRootFilesystem: true
+
+          # WHY: Capabilities are fine-grained privileges (subset of root powers)
+          # STRATEGY: Drop ALL capabilities, then add back only what's needed
+          # MINIMAL VERSION: We add ZERO capabilities to prove basic monitoring works
+          # SECURITY: Least privilege principle - if you don't need it, don't grant it
+          capabilities:
+            # WHY: Remove ALL Linux capabilities from the container
+            # EFFECT: Container has no special kernel permissions
+            # EXAMPLES OF BLOCKED ACTIONS:
+            #   - Cannot bind to ports < 1024 (no CAP_NET_BIND_SERVICE)
+            #   - Cannot kill processes outside container (no CAP_KILL)
+            #   - Cannot change file ownership (no CAP_CHOWN)
+            #   - Cannot trace processes (no CAP_SYS_PTRACE)
+            #   - Cannot capture network packets (no CAP_NET_RAW)
+            drop:
+              - ALL
+
+            # WHY: No capabilities added in minimal version
+            # PROOF: Demonstrates that basic monitoring (proc, sys, metrics) works
+            #        without ANY special privileges beyond non-root user
+            # WHEN TO ADD CAPABILITIES:
+            #   - CAP_SYS_PTRACE: If you need to inspect process memory
+            #   - CAP_NET_RAW: If you need to capture network packets
+            #   - CAP_BPF: If you're using eBPF for kernel observability
+            # See daemonset-enhanced.yaml or daemonset-ebpf.yaml for examples
+            # add: []  # Explicitly empty - no capabilities
+
+        # Environment variables
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: MONITOR_INTERVAL
+          value: "30"
+
+        # === VOLUME MOUNTS ===
+        volumeMounts:
+        # WHY: Mount host's /proc filesystem to monitor processes
+        # WHAT IS /proc: Pseudo-filesystem exposing kernel/process information
+        # PROVIDES ACCESS TO:
+        #   - /proc/<pid>/cmdline: Command line of each process
+        #   - /proc/<pid>/status: Process state, memory usage, UIDs
+        #   - /proc/<pid>/stat: CPU time, threads, parent PID
+        #   - /proc/meminfo: System memory stats
+        #   - /proc/cpuinfo: CPU information
+        # SECURITY: readOnly=true is CRITICAL - prevents tampering with processes
+        # NO ROOT NEEDED: /proc is readable by any user for world-readable files
+        # LIMITATION: Some /proc files require CAP_SYS_PTRACE or being same UID
+        - name: host-proc
+          mountPath: /host/proc
+          readOnly: true  # NEVER make this writable!
+
+        # WHY: Mount host's /sys filesystem for system/hardware information
+        # WHAT IS /sys: Sysfs pseudo-filesystem for kernel objects (devices, modules, etc.)
+        # PROVIDES ACCESS TO:
+        #   - /sys/class/net: Network interfaces
+        #   - /sys/block: Block devices (disks)
+        #   - /sys/devices: Hardware device tree
+        #   - /sys/kernel: Kernel parameters
+        # SECURITY: readOnly=true prevents changing kernel parameters
+        # USE CASE: Discover hardware, network interfaces, system capabilities
+        - name: host-sys
+          mountPath: /host/sys
+          readOnly: true  # NEVER make this writable!
+
+        # WHY: Writable temporary directory (required because root FS is read-only)
+        # TYPE: emptyDir (tmpfs in memory, not persisted)
+        # USE CASE: Store temporary files like metrics.json, working files
+        # SECURITY: Data is ephemeral - lost when pod restarts
+        # SIZE: Limited by memory limits (not persisted to disk)
+        # ALTERNATIVES: Could use emptyDir.medium=Memory for guaranteed tmpfs
+        - name: tmp
+          mountPath: /tmp
+
+        # WHY: Writable directory for application logs
+        # TYPE: emptyDir (lost on pod restart)
+        # USE CASE: Agent can write logs if needed (stdout/stderr preferred)
+        # BEST PRACTICE: Use stdout/stderr for logs (captured by K8s)
+        # NOTE: If you need persistent logs, use PersistentVolume instead
+        - name: var-log
+          mountPath: /var/log/monitor
+
+        # Resource limits
+        resources:
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+
+        # Liveness probe
+        livenessProbe:
+          exec:
+            command:
+            - test
+            - -f
+            - /tmp/metrics.json
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        # Readiness probe
+        readinessProbe:
+          exec:
+            command:
+            - test
+            - -f
+            - /tmp/metrics.json
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+
+      # === VOLUMES ===
+      volumes:
+      # WHY: Bind mount host's /proc directory into the container
+      # VOLUME TYPE: hostPath - direct access to host filesystem path
+      # SECURITY IMPLICATION: Gives container visibility into host processes
+      # ACCEPTABLE BECAUSE:
+      #   1. Mounted read-only (cannot modify)
+      #   2. /proc is designed to be readable (not sensitive data)
+      #   3. Required for monitoring agent's core functionality
+      # ALTERNATIVES CONSIDERED:
+      #   - Kubernetes API: Doesn't provide process-level detail
+      #   - hostPID: More dangerous, gives access to all PIDs directly
+      # JUSTIFICATION: EDR/monitoring requires process visibility
+      - name: host-proc
+        hostPath:
+          path: /proc           # Path on the host
+          type: Directory       # Must exist and be a directory
+
+      # WHY: Bind mount host's /sys directory for system information
+      # WHAT /sys EXPOSES: Kernel objects, devices, modules (sysfs)
+      # SECURITY: Read-only access to hardware/kernel information
+      # USE CASE: Discover network interfaces, disk devices, kernel capabilities
+      # ACCEPTABLE BECAUSE:
+      #   1. Read-only mount
+      #   2. No sensitive data in /sys
+      #   3. Standard for system monitoring tools
+      - name: host-sys
+        hostPath:
+          path: /sys
+          type: Directory
+
+      # WHY: Create an in-memory temporary filesystem
+      # VOLUME TYPE: emptyDir - ephemeral storage, created when pod starts
+      # CHARACTERISTICS:
+      #   - Stored in tmpfs (RAM, not disk) by default on some K8s setups
+      #   - Automatically cleaned up when pod is deleted
+      #   - Shared between container restarts in same pod
+      #   - NOT shared between pods
+      # USE CASE: Temporary files, metrics output, scratch space
+      # SIZE LIMIT: Constrained by container's memory limit
+      # SECURITY: Data doesn't persist, no sensitive data should be stored here
+      - name: tmp
+        emptyDir: {}
+        # OPTIONAL: Force tmpfs (RAM-backed) explicitly:
+        # emptyDir:
+        #   medium: Memory
+        #   sizeLimit: 100Mi
+
+      # WHY: Writable location for agent logs (if not using stdout)
+      # TYPE: emptyDir - ephemeral, lost on pod deletion
+      # BEST PRACTICE: Agent should log to stdout/stderr instead
+      #   - Kubernetes captures stdout/stderr automatically
+      #   - Accessible via 'kubectl logs'
+      #   - Can be shipped to centralized logging (ELK, Splunk, etc.)
+      # THIS VOLUME: Backup option if agent needs file-based logging
+      - name: var-log
+        emptyDir: {}
+
+      # Scheduling
+      # Run on all nodes including master (for demo purposes)
+      tolerations:
+      - effect: NoSchedule
+        operator: Exists
+
+      # Priority - system-node-critical is too high for demo
+      priorityClassName: system-cluster-critical

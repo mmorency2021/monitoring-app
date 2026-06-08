@@ -7,7 +7,14 @@ metadata:
   labels:
     name: rootless-monitor
     # Pod Security Standards enforcement
-    pod-security.kubernetes.io/enforce: restricted
+    # WHY: privileged enforce — baseline and restricted both forbid hostPath volumes,
+    # but monitoring requires read-only hostPath for /proc and /sys.
+    # SECURITY: Actual restrictions enforced by SCC (rootless-monitor-scc):
+    #   - Non-root user (UID 1000)
+    #   - Read-only hostPath only
+    #   - Minimal capabilities
+    #   - No privilege escalation
+    pod-security.kubernetes.io/enforce: privileged
     pod-security.kubernetes.io/enforce-version: latest
-    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit: baseline
     pod-security.kubernetes.io/warn: restricted

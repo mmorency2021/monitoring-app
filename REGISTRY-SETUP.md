@@ -36,7 +36,7 @@ ghcr.io/mmorency2021/monitoring-app:latest
 
 4. **Deploy to any cluster:**
    ```bash
-   kubectl apply -f kubernetes/daemonset-minimal.yaml
+   oc apply -f kubernetes/daemonset-minimal.yaml
    # No imagePullSecrets needed!
    ```
 
@@ -61,7 +61,7 @@ If you want to keep the image private, clusters need authentication to pull.
 
 ```bash
 # Create secret in the rootless-monitor namespace
-kubectl create secret docker-registry ghcr-secret \
+oc create secret docker-registry ghcr-secret \
   --docker-server=ghcr.io \
   --docker-username=mmorency2021 \
   --docker-password=YOUR_GITHUB_TOKEN \
@@ -69,7 +69,7 @@ kubectl create secret docker-registry ghcr-secret \
   -n rootless-monitor
 
 # Verify secret was created
-kubectl get secret ghcr-secret -n rootless-monitor
+oc get secret ghcr-secret -n rootless-monitor
 ```
 
 **Step 3: Update DaemonSet to Use Secret**
@@ -91,7 +91,7 @@ spec:
 **Step 4: Apply Updated Manifest**
 
 ```bash
-kubectl apply -f kubernetes/daemonset-minimal.yaml
+oc apply -f kubernetes/daemonset-minimal.yaml
 ```
 
 ---
@@ -164,19 +164,19 @@ docker pull ghcr.io/mmorency2021/monitoring-app:latest
 **In Kubernetes:**
 ```bash
 # Create test pod
-kubectl run test-pull \
+oc run test-pull \
   --image=ghcr.io/mmorency2021/monitoring-app:latest \
   --restart=Never \
   -n rootless-monitor
 
 # Check if it pulled successfully
-kubectl get pod test-pull -n rootless-monitor
+oc get pod test-pull -n rootless-monitor
 
 # Expected: STATUS = Completed or Running
 # If ImagePullBackOff: image is private and needs secret
 
 # Clean up
-kubectl delete pod test-pull -n rootless-monitor
+oc delete pod test-pull -n rootless-monitor
 ```
 
 **In OpenShift:**
@@ -205,7 +205,7 @@ oc delete pod test-pull -n rootless-monitor
 
 **Check pod events:**
 ```bash
-kubectl describe pod -n rootless-monitor <pod-name>
+oc describe pod -n rootless-monitor <pod-name>
 ```
 
 **Common causes:**
@@ -265,13 +265,13 @@ Once the GitHub Action completes and you've made the package public:
 
 ```bash
 # Just deploy - no registry config needed!
-kubectl apply -f kubernetes/namespace.yaml
-kubectl apply -f kubernetes/serviceaccount.yaml
-kubectl apply -f kubernetes/configmap.yaml
-kubectl apply -f kubernetes/daemonset-minimal.yaml
+oc apply -f kubernetes/namespace.yaml
+oc apply -f kubernetes/serviceaccount.yaml
+oc apply -f kubernetes/configmap.yaml
+oc apply -f kubernetes/daemonset-minimal.yaml
 
 # Pods will pull the image automatically
-kubectl get pods -n rootless-monitor -w
+oc get pods -n rootless-monitor -w
 ```
 
 That's it! ✨

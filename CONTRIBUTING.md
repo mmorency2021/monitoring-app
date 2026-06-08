@@ -53,7 +53,7 @@ docker build -t rootless-monitor:dev .
 ./deploy.sh minimal
 
 # Run tests
-kubectl exec -n rootless-monitor -l app=rootless-monitor -- id
+oc rsh -n rootless-monitor $(oc get pod -n rootless-monitor -l app=rootless-monitor -o jsonpath='{.items[0].metadata.name}') id
 ```
 
 ## Release Process

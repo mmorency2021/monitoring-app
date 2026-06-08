@@ -276,7 +276,7 @@ spec:
       # TYPE: emptyDir - ephemeral, lost on pod deletion
       # BEST PRACTICE: Agent should log to stdout/stderr instead
       #   - Kubernetes captures stdout/stderr automatically
-      #   - Accessible via 'kubectl logs'
+      #   - Accessible via 'oc logs'
       #   - Can be shipped to centralized logging (ELK, Splunk, etc.)
       # THIS VOLUME: Backup option if agent needs file-based logging
       - name: var-log

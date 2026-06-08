@@ -162,7 +162,7 @@ volumes:
 1. **Security First**: Never compromise on security requirements
 2. **Test All Variants**: Changes should work with minimal, enhanced, and eBPF
 3. **Document Capabilities**: If adding capabilities, document WHY in YAML comments
-4. **Verify Non-Root**: Always test that `kubectl exec ... -- id` shows UID 1000
+4. **Verify Non-Root**: Always test that `oc rsh <pod> id` shows UID 1000
 
 ### Adding New Monitoring Features
 
@@ -203,11 +203,11 @@ docker run --rm rootless-monitor:latest id
 ./deploy.sh minimal
 
 # Check logs
-kubectl logs -n rootless-monitor -l app=rootless-monitor -f
+oc logs -n rootless-monitor -l app=rootless-monitor -f
 
 # Verify security
-kubectl exec -n rootless-monitor -l app=rootless-monitor -- id
-kubectl exec -n rootless-monitor -l app=rootless-monitor -- grep Cap /proc/self/status
+oc rsh -n rootless-monitor $POD id
+oc rsh -n rootless-monitor $POD grep Cap /proc/self/status
 ```
 
 ### Add New Suspicious Pattern
@@ -221,19 +221,19 @@ suspicious-patterns: |
   ]
 ```
 
-Then: `kubectl apply -f kubernetes/configmap.yaml && kubectl rollout restart daemonset -n rootless-monitor`
+Then: `oc apply -f kubernetes/configmap.yaml && oc rollout restart daemonset -n rootless-monitor`
 
 ### Switch Variants
 
 ```bash
 # Minimal (no capabilities)
-kubectl apply -f kubernetes/daemonset-minimal.yaml
+oc apply -f kubernetes/daemonset-minimal.yaml
 
 # Enhanced (CAP_SYS_PTRACE, CAP_NET_RAW)
-kubectl apply -f kubernetes/daemonset-enhanced.yaml
+oc apply -f kubernetes/daemonset-enhanced.yaml
 
 # eBPF (CAP_BPF, CAP_PERFMON - requires Linux 5.8+)
-kubectl apply -f kubernetes/daemonset-ebpf.yaml
+oc apply -f kubernetes/daemonset-ebpf.yaml
 ```
 
 ## Reference Information
@@ -310,7 +310,7 @@ When talking to security vendors about rootless requirements:
 
 **Cause**: Security context doesn't meet Restricted requirements  
 **Fix**: Check that all security settings are present in manifest  
-**Verify**: `kubectl describe pod -n rootless-monitor ...` shows violation details
+**Verify**: `oc describe pod -n rootless-monitor ...` shows violation details
 
 ### "Permission denied" for some /proc files
 

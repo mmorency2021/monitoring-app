@@ -2,18 +2,18 @@
 
 A demonstration of EDR-like monitoring capabilities **without root privileges**, designed to show vendors (or any vendor) how to implement secure, rootless container monitoring in Kubernetes.
 
-## 🎯 Purpose
+## Purpose
 
 This project proves that **effective node monitoring is possible without running as root**. It demonstrates:
 
-- ✅ Process monitoring via `/proc` filesystem
-- ✅ Network connection tracking
-- ✅ System metrics collection
-- ✅ Security event detection
-- ✅ All with non-root user (UID 1000)
-- ✅ Compliant with Kubernetes Pod Security Standards (Restricted tier)
+- Process monitoring via `/proc` filesystem
+- Network connection tracking
+- System metrics collection
+- Security event detection
+- All with non-root user (UID 1000)
+- Compliant with Kubernetes Pod Security Standards (Restricted tier)
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 ┌─────────────────────────────────────────┐
@@ -33,7 +33,7 @@ This project proves that **effective node monitoring is possible without running
 └─────────────────────────────────────────┘
 ```
 
-## 📦 What's Included
+## What's Included
 
 ### Application
 - **`monitor.py`**: Python-based monitoring agent
@@ -63,7 +63,7 @@ Three deployment variants with different capability levels:
 - **`pod-security-policy.yaml`**: Legacy PSP for older clusters
 - **`configmap.yaml`**: Agent configuration
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Option A: Use Pre-Built Image (Recommended)
 
@@ -74,10 +74,10 @@ cd rootless-monitor-agent
 
 # Manifests already use ghcr.io/mmorency2021/monitoring-app:latest
 # Just deploy directly
-kubectl apply -f kubernetes/namespace.yaml
-kubectl apply -f kubernetes/serviceaccount.yaml
-kubectl apply -f kubernetes/configmap.yaml
-kubectl apply -f kubernetes/daemonset-minimal.yaml
+oc apply -f kubernetes/namespace.yaml
+oc apply -f kubernetes/serviceaccount.yaml
+oc apply -f kubernetes/configmap.yaml
+oc apply -f kubernetes/daemonset-minimal.yaml
 ```
 
 **Note**: First time pulling from ghcr.io might be slow (~30s for python:3.11-slim base image).
@@ -113,73 +113,76 @@ kind load docker-image rootless-monitor:latest
 
 ```bash
 # Create namespace (with Pod Security Standards enforcement)
-kubectl apply -f kubernetes/namespace.yaml
+oc apply -f kubernetes/namespace.yaml
 
 # Create ServiceAccount and RBAC
-kubectl apply -f kubernetes/serviceaccount.yaml
+oc apply -f kubernetes/serviceaccount.yaml
 
 # Create ConfigMap
-kubectl apply -f kubernetes/configmap.yaml
+oc apply -f kubernetes/configmap.yaml
 
 # Deploy ONE of the following variants:
 
 # Option A: Minimal (no capabilities)
-kubectl apply -f kubernetes/daemonset-minimal.yaml
+oc apply -f kubernetes/daemonset-minimal.yaml
 
 # Option B: Enhanced (CAP_SYS_PTRACE, CAP_NET_RAW)
-kubectl apply -f kubernetes/daemonset-enhanced.yaml
+oc apply -f kubernetes/daemonset-enhanced.yaml
 
 # Option C: eBPF (CAP_BPF, CAP_PERFMON) - requires Linux 5.8+
-kubectl apply -f kubernetes/daemonset-ebpf.yaml
+oc apply -f kubernetes/daemonset-ebpf.yaml
 ```
 
 ### 3. Verify Deployment
 
 ```bash
 # Check pods are running
-kubectl get pods -n rootless-monitor
+oc get pods -n rootless-monitor
 
 # Verify security context
-kubectl get pod -n rootless-monitor -l app=rootless-monitor -o jsonpath='{.items[0].spec.securityContext}' | jq
+oc get pod -n rootless-monitor -l app=rootless-monitor -o jsonpath='{.items[0].spec.securityContext}' | jq
 
 # Check logs
-kubectl logs -n rootless-monitor -l app=rootless-monitor --tail=50
+oc logs -n rootless-monitor -l app=rootless-monitor --tail=50
 
 # Verify running as non-root
-kubectl exec -n rootless-monitor -l app=rootless-monitor -- id
+POD=$(oc get pod -n rootless-monitor -l app=rootless-monitor -o jsonpath='{.items[0].metadata.name}')
+oc rsh -n rootless-monitor $POD id
 # Expected: uid=1000(monitor) gid=1000(monitor)
 ```
 
 ### 4. Test Monitoring Capabilities
 
 ```bash
+POD=$(oc get pod -n rootless-monitor -l app=rootless-monitor -o jsonpath='{.items[0].metadata.name}')
+
 # View real-time monitoring output
-kubectl logs -n rootless-monitor -l app=rootless-monitor -f
+oc logs -n rootless-monitor $POD -f
 
 # Check metrics file
-kubectl exec -n rootless-monitor -l app=rootless-monitor -- cat /tmp/metrics.json
+oc rsh -n rootless-monitor $POD cat /tmp/metrics.json
 
 # Verify capabilities
-kubectl exec -n rootless-monitor -l app=rootless-monitor -- capsh --print
+oc rsh -n rootless-monitor $POD capsh --print
 
 # Test security - this SHOULD FAIL (no privilege escalation)
-kubectl exec -n rootless-monitor -l app=rootless-monitor -- sudo id
+oc rsh -n rootless-monitor $POD sudo id
 # Expected: Error - command not found or permission denied
 ```
 
-## 📊 Monitoring Capabilities by Variant
+## Monitoring Capabilities by Variant
 
 | Feature | Minimal | Enhanced | eBPF |
 |---------|---------|----------|------|
 | **Capabilities** | None | CAP_SYS_PTRACE<br>CAP_NET_RAW | CAP_BPF<br>CAP_PERFMON |
-| **Process Monitoring** | ✅ Basic | ✅ Full | ✅ Full |
-| **Network Monitoring** | ❌ Limited | ✅ Full | ✅ Full |
-| **System Metrics** | ✅ Yes | ✅ Yes | ✅ Yes |
-| **Security Detection** | ✅ Pattern-based | ✅ Enhanced | ✅ Kernel-level |
-| **Root Required?** | ❌ No | ❌ No | ❌ No |
+| **Process Monitoring** | Basic | Full | Full |
+| **Network Monitoring** | Limited | Full | Full |
+| **System Metrics** | Yes | Yes | Yes |
+| **Security Detection** | Pattern-based | Enhanced | Kernel-level |
+| **Root Required?** | No | No | No |
 | **Kernel Version** | Any | Any | 5.8+ |
 
-## 🔐 Security Features
+## Security Features
 
 ### What Makes This Secure
 
@@ -209,57 +212,59 @@ kubectl exec -n rootless-monitor -l app=rootless-monitor -- sudo id
 
 ### What It Can Do (Without Root)
 
-- ✅ Read `/proc` filesystem (process info)
-- ✅ Read `/sys` filesystem (system info)
-- ✅ Monitor system metrics (CPU, memory, disk, network)
-- ✅ Detect suspicious process patterns
-- ✅ Track network connections (with CAP_NET_RAW)
-- ✅ Inspect process memory (with CAP_SYS_PTRACE)
-- ✅ Load eBPF programs (with CAP_BPF)
-- ✅ Export metrics and logs
+- Read `/proc` filesystem (process info)
+- Read `/sys` filesystem (system info)
+- Monitor system metrics (CPU, memory, disk, network)
+- Detect suspicious process patterns
+- Track network connections (with CAP_NET_RAW)
+- Inspect process memory (with CAP_SYS_PTRACE)
+- Load eBPF programs (with CAP_BPF)
+- Export metrics and logs
 
 ### What It Cannot Do (Security Guaranteed)
 
-- ❌ Modify host filesystem
-- ❌ Access other containers' data
-- ❌ Escalate to root privileges
-- ❌ Bypass security policies
-- ❌ Write to read-only volumes
-- ❌ Change container's own security context
+- Modify host filesystem
+- Access other containers' data
+- Escalate to root privileges
+- Bypass security policies
+- Write to read-only volumes
+- Change container's own security context
 
-## 🧪 Testing Security
+## Testing Security
 
 ### Verify Non-Root Operation
 
 ```bash
+POD=$(oc get pod -n rootless-monitor -l app=rootless-monitor -o jsonpath='{.items[0].metadata.name}')
+
 # Should show UID 1000, not 0
-kubectl exec -n rootless-monitor -l app=rootless-monitor -- id
+oc rsh -n rootless-monitor $POD id
 
 # Should fail - no sudo
-kubectl exec -n rootless-monitor -l app=rootless-monitor -- sudo whoami
+oc rsh -n rootless-monitor $POD sudo whoami
 
 # Should fail - read-only root FS
-kubectl exec -n rootless-monitor -l app=rootless-monitor -- touch /test.txt
+oc rsh -n rootless-monitor $POD touch /test.txt
 ```
 
 ### Check Capabilities
 
 ```bash
 # See what capabilities are granted
-kubectl exec -n rootless-monitor -l app=rootless-monitor -- grep Cap /proc/self/status
+oc rsh -n rootless-monitor $POD grep Cap /proc/self/status
 
 # Decode capabilities (if capsh is available)
-kubectl exec -n rootless-monitor -l app=rootless-monitor -- capsh --print
+oc rsh -n rootless-monitor $POD capsh --print
 ```
 
 ### Validate Pod Security Standards
 
 ```bash
 # Check namespace labels
-kubectl get namespace rootless-monitor -o yaml | grep pod-security
+oc get namespace rootless-monitor -o yaml | grep pod-security
 
 # Try to deploy a privileged pod (should be BLOCKED)
-cat <<EOF | kubectl apply -f -
+cat <<EOF | oc apply -f -
 apiVersion: v1
 kind: Pod
 metadata:
@@ -273,10 +278,10 @@ spec:
     securityContext:
       privileged: true
 EOF
-# Expected: Error - violates PodSecurity "restricted:latest"
+# Expected: Error - violates PodSecurity
 ```
 
-## 📝 Configuration
+## Configuration
 
 Edit `kubernetes/configmap.yaml` to customize:
 
@@ -305,15 +310,15 @@ data:
 
 Apply changes:
 ```bash
-kubectl apply -f kubernetes/configmap.yaml
-kubectl rollout restart daemonset/rootless-monitor-minimal -n rootless-monitor
+oc apply -f kubernetes/configmap.yaml
+oc rollout restart daemonset/rootless-monitor-minimal -n rootless-monitor
 ```
 
-## 🎓 For vendors / Vendors
+## For vendors / Vendors
 
 This project demonstrates:
 
-### ✅ What You Should Do
+### What You Should Do
 
 1. **Create non-root user in Dockerfile**
    ```dockerfile
@@ -350,7 +355,7 @@ This project demonstrates:
    - Better performance and stability
    - Industry best practice
 
-### ❌ What to Avoid
+### What to Avoid
 
 - Running as root (UID 0)
 - `privileged: true`
@@ -360,7 +365,7 @@ This project demonstrates:
 - `hostNetwork: true` (if avoidable)
 - `hostPID: true` (use CAP_SYS_PTRACE instead)
 
-## 📚 References
+## References
 
 ### Kubernetes Security
 - [Pod Security Standards](https://kubernetes.io/docs/concepts/security/pod-security-standards/)
@@ -376,13 +381,13 @@ This project demonstrates:
 - [Microsoft Defender eBPF Mode](https://learn.microsoft.com/en-us/defender-endpoint/linux-support-ebpf)
 - [Datadog Agent eBPF](https://docs.datadoghq.com/infrastructure/process/)
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Pod Won't Start
 
 ```bash
 # Check events
-kubectl describe pod -n rootless-monitor -l app=rootless-monitor
+oc describe pod -n rootless-monitor -l app=rootless-monitor
 
 # Common issues:
 # - "Error: container has runAsNonRoot and image has non-numeric user"
@@ -395,11 +400,13 @@ kubectl describe pod -n rootless-monitor -l app=rootless-monitor
 ### No Process Monitoring Data
 
 ```bash
+POD=$(oc get pod -n rootless-monitor -l app=rootless-monitor -o jsonpath='{.items[0].metadata.name}')
+
 # Check if /proc is mounted
-kubectl exec -n rootless-monitor -l app=rootless-monitor -- ls /host/proc
+oc rsh -n rootless-monitor $POD ls /host/proc
 
 # Check permissions
-kubectl exec -n rootless-monitor -l app=rootless-monitor -- ls -la /host/proc/1
+oc rsh -n rootless-monitor $POD ls -la /host/proc/1
 ```
 
 ### Network Monitoring Fails
@@ -409,14 +416,14 @@ kubectl exec -n rootless-monitor -l app=rootless-monitor -- ls -la /host/proc/1
 # Use daemonset-enhanced.yaml or daemonset-ebpf.yaml
 
 # Check capabilities
-kubectl exec -n rootless-monitor -l app=rootless-monitor -- grep Cap /proc/self/status
+oc rsh -n rootless-monitor $POD grep Cap /proc/self/status
 ```
 
-## 📄 License
+## License
 
 This is a proof-of-concept for educational purposes. Use it to demonstrate secure, rootless monitoring to vendors.
 
-## 🤝 Contributing
+## Contributing
 
 This is a demonstration project to help telcos enforce security requirements with vendors. Feel free to adapt it for your own use cases.
 

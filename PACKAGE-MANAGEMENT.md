@@ -336,7 +336,7 @@ Create a GitHub token with **only** `read:packages` scope:
 
 ```bash
 # Replace YOUR_TOKEN with the actual token
-kubectl create secret docker-registry ghcr-pull-secret \
+oc create secret docker-registry ghcr-pull-secret \
   --docker-server=ghcr.io \
   --docker-username=mmorency2021 \
   --docker-password=YOUR_TOKEN \
@@ -344,10 +344,10 @@ kubectl create secret docker-registry ghcr-pull-secret \
   -n rootless-monitor
 
 # Verify secret
-kubectl get secret ghcr-pull-secret -n rootless-monitor
+oc get secret ghcr-pull-secret -n rootless-monitor
 
 # View secret details (base64 encoded)
-kubectl get secret ghcr-pull-secret -n rootless-monitor -o yaml
+oc get secret ghcr-pull-secret -n rootless-monitor -o yaml
 ```
 
 #### Step 3: Update DaemonSet Manifests
@@ -378,10 +378,10 @@ Repeat for `daemonset-enhanced.yaml` and `daemonset-ebpf.yaml`.
 #### Step 4: Deploy
 
 ```bash
-kubectl apply -f kubernetes/daemonset-minimal.yaml
+oc apply -f kubernetes/daemonset-minimal.yaml
 
 # Verify pods pull successfully
-kubectl get pods -n rootless-monitor -w
+oc get pods -n rootless-monitor -w
 ```
 
 ### For OpenShift
@@ -486,10 +486,10 @@ Tokens should be rotated periodically.
 # 1. Create new GitHub token
 
 # 2. Delete old secret
-kubectl delete secret ghcr-pull-secret -n rootless-monitor
+oc delete secret ghcr-pull-secret -n rootless-monitor
 
 # 3. Create new secret with new token
-kubectl create secret docker-registry ghcr-pull-secret \
+oc create secret docker-registry ghcr-pull-secret \
   --docker-server=ghcr.io \
   --docker-username=mmorency2021 \
   --docker-password=NEW_TOKEN \
@@ -500,7 +500,7 @@ kubectl create secret docker-registry ghcr-pull-secret \
 oc secrets link rootless-monitor ghcr-pull-secret --for=pull -n rootless-monitor
 
 # 5. Restart pods to use new secret
-kubectl rollout restart daemonset/rootless-monitor-minimal -n rootless-monitor
+oc rollout restart daemonset/rootless-monitor-minimal -n rootless-monitor
 ```
 
 ---
@@ -526,13 +526,13 @@ kubectl rollout restart daemonset/rootless-monitor-minimal -n rootless-monitor
 **Debug:**
 ```bash
 # Check pod events
-kubectl describe pod <pod-name> -n rootless-monitor
+oc describe pod <pod-name> -n rootless-monitor
 
 # Verify secret exists
-kubectl get secret ghcr-pull-secret -n rootless-monitor
+oc get secret ghcr-pull-secret -n rootless-monitor
 
 # Test secret is valid
-kubectl run test-pull \
+oc run test-pull \
   --image=ghcr.io/mmorency2021/monitoring-app:latest \
   --restart=Never \
   --overrides='{"spec":{"imagePullSecrets":[{"name":"ghcr-pull-secret"}]}}' \
@@ -603,7 +603,7 @@ docker push ghcr.io/mmorency2021/monitoring-app:latest
 docker pull ghcr.io/mmorency2021/monitoring-app:latest
 
 # Create K8s secret
-kubectl create secret docker-registry ghcr-pull-secret \
+oc create secret docker-registry ghcr-pull-secret \
   --docker-server=ghcr.io \
   --docker-username=mmorency2021 \
   --docker-password=$GITHUB_TOKEN \

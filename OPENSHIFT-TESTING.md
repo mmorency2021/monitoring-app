@@ -27,22 +27,7 @@ oc whoami
 oc cluster-info
 ```
 
-### Option 1: Deploy Using kubectl (Compatible)
-
-```bash
-cd rootless-monitor-agent
-
-# OpenShift accepts kubectl commands
-kubectl apply -f kubernetes/namespace.yaml
-kubectl apply -f kubernetes/serviceaccount.yaml
-kubectl apply -f kubernetes/configmap.yaml
-kubectl apply -f kubernetes/daemonset-minimal.yaml
-
-# Wait for ready
-kubectl wait --for=condition=ready pod -l app=rootless-monitor -n rootless-monitor --timeout=60s
-```
-
-### Option 2: Deploy Using oc
+### Deploy Using oc
 
 ```bash
 # Create project (OpenShift's namespace)
@@ -93,8 +78,8 @@ oc patch daemonset rootless-monitor-minimal \
 POD=$(oc get pod -n rootless-monitor -l app=rootless-monitor -o jsonpath='{.items[0].metadata.name}')
 echo "Testing pod: $POD"
 
-# Or using kubectl
-POD=$(kubectl get pod -n rootless-monitor -l app=rootless-monitor -o jsonpath='{.items[0].metadata.name}')
+# Alternative using jsonpath
+POD=$(oc get pod -n rootless-monitor -l app=rootless-monitor -o jsonpath='{.items[0].metadata.name}')
 ```
 
 ### Check User ID

@@ -1,0 +1,45 @@
+Recently I worked extensively with ACS as a part of the ZTVP project implementation.
+Below are my 2 cents regarding the mentioned security concerns:
+
+Regarding the Helm Chart usage in the operator, the ACS operator is a hybrid Go+Helm operator built on operator-framework/helm-operator-plugins.
+This is documented in operator/ARCHITECTURE.md.
+The Helm charts are embedded inside the operator binary at build time (from image/templates/helm/). They're not fetched from an external repository at runtime.
+The operator doesn't run helm install. It uses the Helm library to render templates in-process and then applies the resulting Kubernetes manifests via the Kubernetes API.
+It's true that ACS helm charts are not "certified" and stored in charts.openshift.io repository.
+We should document this as a known exception in my opinion. 
+
+
+Regarding the second concern, the Collector running with Root/Privileged permissions, it's a little bit more complicated.
+The ACS Collector actually uses:
+  securityContext:
+    privileged: true
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+      - NET_RAW
+(source: https://github.com/stackrox/stackrox/blob/master/image/templates/helm/stackrox-secured-cluster/templates/collector.yaml.htpl#L74-L79)
+Additionally there is SCC binding to the privileged SCC.  
+
+The eBPF program loading requires at minimum CAP_BPF (Linux 5.8+) or CAP_SYS_ADMIN (older kernels).
+OCP 4.16+ runs RHEL 9.4+ with kernel 5.14+, so CAP_BPF is available, but eBPF tracing programs (kprobes, tracepoints — which collector uses to monitor process execution and network flows) additionally require CAP_PERFMON and CAP_SYS_PTRACE. The host /proc access requires CAP_SYS_PTRACE, and kernel module loading (legacy fallback when eBPF isn't available) requires CAP_SYS_MODULE. 
+
+So, using `privileged: true` as a blanket covers all capabilities and all kernel versions.
+
+Can it be improved? In my humble opinion there is room for research and improvement.
+Theoretically with these granular capabilities, everything should work and be more secure.
+  securityContext:
+    privileged: false
+    capabilities:
+      add:
+      - SYS_ADMIN      # or BPF on newer kernels
+      - SYS_PTRACE     # /proc access
+      - SYS_RESOURCE   # rlimit for BPF maps
+      - PERFMON        # tracing programs
+      - NET_ADMIN      # network flow monitoring
+      - DAC_READ_SEARCH # host filesystem read
+      drop:
+      - ALL
+
+
+Additionally, the compliance container in the Collector runs as `runAsUser: 0`.
+This could potentially be separated into a non-root container with only DAC_READ_SEARCH capability for host filesystem scanning.
